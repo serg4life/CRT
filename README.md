@@ -30,4 +30,4 @@ Configuramos las opciones del Kernel utilizando
 Dentro de la ventana de configuracion, accedemos a "General Setup" y modificamos el nombre de la version local, despues seleccionamos "Preempt model" y lo establecemos en RT.
 
 ### Compilamos el Kernel
-make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- Image modules dtbs
+>make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- Image modules dtbs
