@@ -3,9 +3,10 @@ import os
 import ctypes
 import RPi.GPIO as GPIO
 from multiprocessing import Process, Queue
-import board
-import digitalio
-import adafruit_ssd1306
+from luma.core.interface.serial import i2c
+from luma.core.render import canvas
+from luma.oled.device import ssd1306
+from time import sleep
 
 # Configuración de GPIO
 GPIO.setmode(GPIO.BCM)
@@ -70,33 +71,33 @@ def tarea_boton():
 
 # Tarea no crítica para la pantalla OLED
 def tarea_oled(cola):
-    # Configuración de la pantalla OLED
-    i2c = board.I2C()
-    oled = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c)
+    # Inicializa la comunicación I²C y el dispositivo OLED
+    serial = i2c(port=1, address=0x3C)  # El address puede ser 0x3C o 0x3D, depende del display
+    device = ssd1306(serial)
 
     while True:
         if not cola.empty():
             contador = cola.get()
-            oled.fill(0)  # Limpiar pantalla
-            oled.text(f"Contador: {contador}", 0, 0, 1)
-            oled.show()  # Mostrar el valor en la pantalla
+            # Limpia la pantalla
+            device.clear()
+
+            # Dibuja el valor del contador en la pantalla
+            with canvas(device) as draw:
+                draw.rectangle(device.bounding_box, outline="white", fill="black")
+                draw.text((10, 20), f"Contador: {contador}", fill="white")
 
 # Configurar prioridad de tiempo real
-def configurar_tiempo_real(prio):
+def set_priority(pid: int, prio: int):
     param = os.sched_param(prio)
     print(f"Configurando prioridad de tiempo real: {prio}")
     try:
-        os.sched_setscheduler(0, os.SCHED_FIFO, param)
+        os.sched_setscheduler(pid, os.SCHED_FIFO, param)
     except PermissionError:
         print("Error: Se requieren privilegios de superusuario para establecer prioridad de tiempo real.")
         os._exit(-1)
 
 # Función principal
 if __name__ == "__main__":
-    # Configurar prioridades de tiempo real
-    configurar_tiempo_real(20)  # Prioridad para fotodiodos
-    configurar_tiempo_real(30)  # Prioridad más alta para el botón
-
     # Crear procesos para las tareas
     proceso_fotodiodos = Process(target=tarea_fotodiodos, args=(cola_contador,))
     proceso_boton = Process(target=tarea_boton)
@@ -107,6 +108,9 @@ if __name__ == "__main__":
     proceso_boton.start()
     proceso_oled.start()
 
+    # Configurar prioridades de tiempo real después de iniciar los procesos
+    set_priority(proceso_fotodiodos.pid, 20)
+    set_priority(proceso_boton.pid, 30)
     # Esperar a que los procesos terminen (no deberían)
     proceso_fotodiodos.join()
     proceso_boton.join()
