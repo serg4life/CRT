@@ -5,7 +5,7 @@ import time
 GPIO.setmode(GPIO.BCM)
 
 # Define el pin GPIO que vas a usar
-pin_entrada = 27
+pin_entrada = 17
 
 # Configura el pin como entrada
 GPIO.setup(pin_entrada, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
