@@ -1,5 +1,6 @@
 # CRT
 
+
 ## Descarga del Kernel y el parche
 Accedemos a la documentacion oficial de Raspberry Pi mediante el siguiente link
 https://www.raspberrypi.com/documentation/computers/linux_kernel.html
