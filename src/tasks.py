@@ -1,95 +1,93 @@
-import RPi.GPIO as GPIO
-from luma.core.interface.serial import i2c
+from gpiozero import Button, LED
+from gpiozero import Device
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
 import time
 import os
 from multiprocessing import Queue, Value
-from ctypes import c_bool
 
-# Callback para el fotodiodo que incrementa (REVISAR CALLBACKS)
-def increment_callback(channel, cola, running):
+# Callback para el fotodiodo que incrementa
+def increment_callback(cola, running: 'Value'):
     if running.value:
         contador = cola.get() if not cola.empty() else 0
         contador += 1
-        print("Contador incrementado:", contador)
+        #print("Contador incrementado:", contador)
         cola.put(contador)
 
 # Callback para el fotodiodo que decrementa
-def decrement_callback(channel, cola, running):
+def decrement_callback(cola, running):
     if running.value:
         contador = cola.get() if not cola.empty() else 0
         contador -= 1
-        print("Contador decrementado:", contador)
+        #print("Contador decrementado:", contador)
         cola.put(contador)
 
 # Callback para el botón
-def button_callback(channel, led_pin, running):
+def button_callback(led, running: 'Value', device: ssd1306):
     if running.value:
-        GPIO.output(led_pin, GPIO.HIGH)  # Encender LED rojo
-        print("Botón presionado: LED rojo encendido")
-        time.sleep(1)  # Mantener el LED encendido por 1 segundo
-        GPIO.output(led_pin, GPIO.LOW)  # Apagar LED rojo
+        led.on()
+        with canvas(device) as draw:
+            draw.rectangle(device.bounding_box, outline="white", fill="black")
+            draw.text((10, 20), "ALERTA!", fill="white")
+            draw.text((10, 40), "Botón presionado", fill="white")
+        #print("Botón presionado: LED rojo encendido")
+        time.sleep(3)
+        #device.clear() (ESTO HACERLO EN LA TAREA OLED? INDICANDOSELO CON ALGUN FLAG?)
+        #with canvas(device) as draw:
+            #draw.rectangle(device.bounding_box, outline="white", fill="black")
+        led.off()
 
 # Tarea de tiempo real para los fotodiodos
-def diode_task(cola: Queue, increment_diode_pin: int, decrement_diode_pin: int, running: 'Value'):
+def diode_task(cola: Queue, increment_diode: Button, decrement_diode: Button, running: 'Value'):
     contador = 0
     try:
         while running.value:
-            # Leer el estado de los fotodiodos
-            if GPIO.input(increment_diode_pin) == GPIO.HIGH:
+            if increment_diode.is_pressed:
                 contador += 1
-                print("Contador incrementado:", contador)
-                cola.put(contador)  # Enviar el valor a la cola
-                time.sleep(0.1)  # Debounce
-
-            if GPIO.input(decrement_diode_pin) == GPIO.HIGH:
+                #print("Contador incrementado:", contador)
+                cola.put(contador)
+                time.sleep(0.1)
+            if decrement_diode.is_pressed:
                 contador -= 1
-                print("Contador decrementado:", contador)
-                cola.put(contador)  # Enviar el valor a la cola
-                time.sleep(0.1)  # Debounce
+                #print("Contador decrementado:", contador)
+                cola.put(contador)
+                time.sleep(0.1)
     except KeyboardInterrupt:
         print("diode_task interrupted by the user")
-        
+        Device.close()
+
 # Tarea de tiempo real de mayor prioridad para el botón
-def tarea_boton(button_pin: int, led_pin: int, running: 'Value'):
+def tarea_boton(button: Button, led: LED, running: 'Value'):
     try:
         while running.value:
-            if GPIO.input(button_pin) == GPIO.HIGH:
-                GPIO.output(led_pin, GPIO.HIGH)  # Encender LED rojo
-                print("Botón presionado: LED rojo encendido")
-                time.sleep(1)  # Mantener el LED encendido por 1 segundo
-                GPIO.output(led_pin, GPIO.LOW)  # Apagar LED rojo
-                time.sleep(0.1)  # Debounce
+            if button.is_active:
+                led.on()
+                #print("Botón presionado: LED rojo encendido")
+                time.sleep(1)
+                led.off()
+                time.sleep(0.1)
     except KeyboardInterrupt:
         print("tarea_boton interrupted by the user")
+        Device.close()
 
 # Tarea no crítica para la pantalla OLED
-def tarea_oled(cola: Queue, running: 'Value', i2c_port: int = 1, i2c_address: int = 0x3C):
+def tarea_oled(cola: Queue, running: 'Value', device: ssd1306):
+    # CONFIGURAR CON TIMER?
     try:
-        # Inicializa la comunicación I²C y el dispositivo OLED
-        while running.value:
-            try:
-                serial = i2c(i2c_port, i2c_address)  # El address puede ser 0x3C o 0x3D, depende del display
-                device = ssd1306(serial)
-                print("¡Pantalla OLED inicializada!")
-                break
-            except:
-                time.sleep(0.5)
-                print("Error al inicializar la pantalla OLED. Reintentando...")
-                
+        device.clear()
+        with canvas(device) as draw:
+            draw.rectangle(device.bounding_box, outline="white", fill="black")
         while running.value:
             if not cola.empty():
                 contador = cola.get()
-                # Limpia la pantalla
                 device.clear()
-
-                # Dibuja el valor del contador en la pantalla
                 with canvas(device) as draw:
                     draw.rectangle(device.bounding_box, outline="white", fill="black")
                     draw.text((10, 20), f"Contador: {contador}", fill="white")
+            time.
     except KeyboardInterrupt:
         print("tarea_oled interrupted by the user")
+        Device.close()
 
 # Configurar prioridad de tiempo real
 def set_priority(pid: int, prio: int):
@@ -99,4 +97,5 @@ def set_priority(pid: int, prio: int):
         os.sched_setscheduler(pid, os.SCHED_FIFO, param)
     except PermissionError:
         print("Error: Se requieren privilegios de superusuario para establecer prioridad de tiempo real.")
+        Device.close()
         os._exit(-1)
