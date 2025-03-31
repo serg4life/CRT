@@ -20,24 +20,6 @@ led_rojo = LED(5)
 # Cola para compartir datos entre tareas
 cola_contador = Queue()
 
-# Constantes para tiempo real
-NSEC_PER_SEC = 1000000000
-CLOCK_REALTIME = 0
-TIMER_ABSTIME = 1
-
-# Estructura para tiempos
-class timespec(ctypes.Structure):
-    _fields_ = [("tv_sec", ctypes.c_long), ("tv_nsec", ctypes.c_long)]
-
-# Cargar librería de tiempo real
-librt = ctypes.CDLL('libc.so.6', mode=ctypes.RTLD_GLOBAL)
-
-# Normalizar tiempos
-def tsnorm(ts):
-    while ts.tv_nsec >= NSEC_PER_SEC:
-        ts.tv_nsec -= NSEC_PER_SEC
-        ts.tv_sec += 1
-
 # Función principal
 if __name__ == "__main__":
     running = Value(c_bool, True)

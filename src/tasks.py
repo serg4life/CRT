@@ -84,7 +84,7 @@ def tarea_oled(cola: Queue, running: 'Value', device: ssd1306):
                 with canvas(device) as draw:
                     draw.rectangle(device.bounding_box, outline="white", fill="black")
                     draw.text((10, 20), f"Contador: {contador}", fill="white")
-            time.
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("tarea_oled interrupted by the user")
         Device.close()
