@@ -3,12 +3,13 @@ from gpiozero import Device
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
 import time
+import os
 from multiprocessing import Queue, Value, Process
 
 from shared_resources import contador_queue
 from ContadorLocal import ContadorLocal
 
-# Variables para debounce
+# Variables para debounce, para evitar multiples detecciones de pulsos.
 DEBOUNCE_TIME = 0.2
 last_interrupt_time_increment = 0
 last_interrupt_time_decrement = 0
