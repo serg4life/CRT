@@ -26,7 +26,7 @@ Configuramos el Kernel para nuestra Raspberry Pi 4B de 64 bits
 >make bcm2711_defconfig
 
 Configuramos las opciones del Kernel utilizando 
->make menuconfig
+>make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- menuconfig
 
 Dentro de la ventana de configuracion, accedemos a "General Setup" y modificamos el nombre de la version local, despues seleccionamos "Preempt model" y lo establecemos en RT.
 
