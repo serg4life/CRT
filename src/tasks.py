@@ -1,89 +1,66 @@
-from gpiozero import Button, LED
+from gpiozero import LED
 from gpiozero import Device
 from luma.core.render import canvas
 from luma.oled.device import ssd1306
 import time
-import os
-from multiprocessing import Queue, Value
+from multiprocessing import Queue, Value, Process
+
+from shared_resources import contador_queue
+from ContadorLocal import ContadorLocal
+
+# Variables para debounce
+DEBOUNCE_TIME = 0.2
+last_interrupt_time_increment = 0
+last_interrupt_time_decrement = 0
 
 # Callback para el fotodiodo que incrementa
-def increment_callback(cola, running: 'Value'):
-    if running.value:
-        contador = cola.get() if not cola.empty() else 0
-        contador += 1
-        #print("Contador incrementado:", contador)
-        cola.put(contador)
+def increment_callback(contador: ContadorLocal, running: 'Value'):
+    global last_interrupt_time_increment
+    current_time = time.time()
+    if current_time - last_interrupt_time_increment > DEBOUNCE_TIME:
+        last_interrupt_time_increment = current_time
+        if running.value:
+            contador.incrementar() # Dentro de esta funcion se gestiona el lock y la cola.
 
 # Callback para el fotodiodo que decrementa
-def decrement_callback(cola, running):
-    if running.value:
-        contador = cola.get() if not cola.empty() else 0
-        contador -= 1
-        #print("Contador decrementado:", contador)
-        cola.put(contador)
+def decrement_callback(contador: ContadorLocal, running: 'Value'):
+    global last_interrupt_time_decrement
+    current_time = time.time()
+    if current_time - last_interrupt_time_decrement > DEBOUNCE_TIME:
+        last_interrupt_time_decrement = current_time
+        if running.value:
+            contador.decrementar() # Dentro de esta funcion se gestiona el lock y la cola.
+
+def blink_led(led, emergency: 'Value'):
+        led.on()
+        time.sleep(1)
+        led.off()
+        emergency.value = False # Para que solo se pueda establecer una emergencia a la vez.
 
 # Callback para el botón
-def button_callback(led, running: 'Value', device: ssd1306):
+def button_callback(led, running: 'Value', emergency: 'Value'):
     if running.value:
-        led.on()
-        with canvas(device) as draw:
-            draw.rectangle(device.bounding_box, outline="white", fill="black")
-            draw.text((10, 20), "ALERTA!", fill="white")
-            draw.text((10, 40), "Botón presionado", fill="white")
-        #print("Botón presionado: LED rojo encendido")
-        time.sleep(3)
-        #device.clear() (ESTO HACERLO EN LA TAREA OLED? INDICANDOSELO CON ALGUN FLAG?)
-        #with canvas(device) as draw:
-            #draw.rectangle(device.bounding_box, outline="white", fill="black")
-        led.off()
-
-# Tarea de tiempo real para los fotodiodos
-def diode_task(cola: Queue, increment_diode: Button, decrement_diode: Button, running: 'Value'):
-    contador = 0
-    try:
-        while running.value:
-            if increment_diode.is_pressed:
-                contador += 1
-                #print("Contador incrementado:", contador)
-                cola.put(contador)
-                time.sleep(0.1)
-            if decrement_diode.is_pressed:
-                contador -= 1
-                #print("Contador decrementado:", contador)
-                cola.put(contador)
-                time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("diode_task interrupted by the user")
-        Device.close()
-
-# Tarea de tiempo real de mayor prioridad para el botón
-def tarea_boton(button: Button, led: LED, running: 'Value'):
-    try:
-        while running.value:
-            if button.is_active:
-                led.on()
-                #print("Botón presionado: LED rojo encendido")
-                time.sleep(1)
-                led.off()
-                time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("tarea_boton interrupted by the user")
-        Device.close()
+        if not emergency.value:
+            emergency.value = True
+            p = Process(target=blink_led, args=(led, emergency))
+            p.start()
+            set_priority(p.pid, 90)
+            
 
 # Tarea no crítica para la pantalla OLED
-def tarea_oled(cola: Queue, running: 'Value', device: ssd1306):
+def tarea_oled(running: 'Value', device: ssd1306):
     # CONFIGURAR CON TIMER?
     try:
         device.clear()
         with canvas(device) as draw:
             draw.rectangle(device.bounding_box, outline="white", fill="black")
         while running.value:
-            if not cola.empty():
-                contador = cola.get()
+            if not contador_queue.empty():
+                value = contador_queue.get()
                 device.clear()
                 with canvas(device) as draw:
                     draw.rectangle(device.bounding_box, outline="white", fill="black")
-                    draw.text((10, 20), f"Contador: {contador}", fill="white")
+                    draw.text((10, 20), f"Contador: {value}", fill="white")
             time.sleep(0.1)
     except KeyboardInterrupt:
         print("tarea_oled interrupted by the user")
@@ -92,7 +69,7 @@ def tarea_oled(cola: Queue, running: 'Value', device: ssd1306):
 # Configurar prioridad de tiempo real
 def set_priority(pid: int, prio: int):
     param = os.sched_param(prio)
-    print(f"Configurando prioridad de tiempo real: {prio}")
+    #print(f"Configurando prioridad de tiempo real: {prio}")
     try:
         os.sched_setscheduler(pid, os.SCHED_FIFO, param)
     except PermissionError:

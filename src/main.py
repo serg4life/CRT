@@ -4,25 +4,28 @@ from gpiozero import Button, LED
 from gpiozero import Device
 from luma.oled.device import ssd1306
 from luma.core.interface.serial import i2c
-from multiprocessing import Process, Queue, Value
+from multiprocessing import Process, Value
 import ctypes
 import time
 
+from shared_resources import contador_queue
 from ctypes import c_bool
 from tasks import tarea_oled, set_priority, button_callback, increment_callback, decrement_callback
+from ContadorLocal import ContadorLocal
 
 # Configuración de GPIO
-fotodiodo_incrementar = Button(17, pull_up=False)
-fotodiodo_decrementar = Button(27, pull_up=False)
-boton_reset = Button(22, pull_up=False)
+fotodiodo_incrementar = Button(17, pull_up=True)
+fotodiodo_decrementar = Button(27, pull_up=True)
+boton_reset = Button(22, pull_up=True)
 led_rojo = LED(5)
 
-# Cola para compartir datos entre tareas
-cola_contador = Queue()
-
+# vInstancia del objeto ContadorLocal
+contador_local = ContadorLocal(contador_queue)
+        
 # Función principal
 if __name__ == "__main__":
     running = Value(c_bool, True)
+    emergency = Value(c_bool, False)
     
     while True:
             try:
@@ -35,12 +38,12 @@ if __name__ == "__main__":
                 time.sleep(0.5)
     
     # Configurar interrupciones
-    fotodiodo_incrementar.when_activated = lambda: increment_callback(cola_contador, running)
-    fotodiodo_decrementar.when_activated = lambda: decrement_callback(cola_contador, running)
-    boton_reset.when_activated = lambda: button_callback(led_rojo, running, device)
+    fotodiodo_incrementar.when_deactivated = lambda: increment_callback(contador_local, running)
+    fotodiodo_decrementar.when_deactivated = lambda: decrement_callback(contador_local, running)
+    boton_reset.when_deactivated = lambda: button_callback(led_rojo, running, emergency)
 
     # Crear procesos para las tareas
-    proceso_oled = Process(target=tarea_oled, args=(cola_contador, running, device))
+    proceso_oled = Process(target=tarea_oled, args=(running, device))
 
     try:
         # Iniciar procesos
