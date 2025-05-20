@@ -2,11 +2,35 @@
 ## Introducción
 Este repositorio describe el proyecto realizado para la asignatura "Control mediante Real-Time Linux". En este proyecto se utiliza una Raspberry Pi 4B de 8GB de RAM para implementar una aplicacion en tiempo real. La aplicación a implementar se trata de un programa que incrementa y decrementa en tiempo real un contador en función de los pulsos detectados en dos pares de fototransistores, el valor del contador se muestra en una pantalla OLED de 0,96" controlada mediante i2c. Adicionalmente, hay un botón que simula una parada de emergencia y cuya única función es encender un LED rojo.
 
+## Descripción del sistema
+El proyecto está compuesto por varios archivos Python, cada uno con funciones específicas. Estos, se relacionan entre sí mediante el uso compartido de recursos como colas (Queue)
+y variables de estado (Value). La interacción con el hadware se realiza a través de la biblioteca gpiozero y la visualización OLED mediante la librería luma.oled.
+
+El archivo main.py es el script principal, donde se inicializan los sensores, el LED rojo, el botón y la pantalla OLED. En este archivo, se crea el objeto que maneja el contador, que lleva
+la cuenta de los eventos. Adenás, también se configuran las interrupciones, así cuando un sensor detecta un cambio se llama a la función que actualiza el contador. 
+Por otro lado, también se lanza un proceso aparta para encargarse de actualizar la pantalla, de modo que esta esté leyendo continuamente el valor del contador sin molestar al resto del sistema.
+Finalmente, es importante comentar la gestión de prioridades de los procesos de este archivo. El proceso que enciende el LED rojo por una emergencia es el que mayor prioridad tiene (90), ya que
+en caso de emergencia es esencial que todo quede en segundo plano menos la señal de emergencia que es el LED rojo. Sin embargo, la pantalla baja tiene una prioridad más baja (20), porque no es
+tan crítico como puede ser la señal de emergencia.
+
+En el archivo ContadorLocal.py se gestiona el valor del contador con dos métodos: incrementar() y decrementar(). Estos están protegidos por un bloqueo para evitar que dos procesos accedan al
+contador al mismo tiempo y así evitar errores que se podrían generar. Cada vez que se actualiza el valor del contador, se manda a la Queue que está leyendo continuamente le proceso de la pantalla
+OLED, así todos los cambios se reflejan al momento.
+
+El archivo shared_resources.py solamente define el Queue que se utiliza como recurso compartido entre procesos. Se define la Queue aquí para que todos los módulos que la necesiten la importen
+desde un único lugar.
+
+Finalmente, tasks.py contiene las funciones que hacen tareas concretas. Las funciones increment_callback() y decrement_callback() se ejecutan cuando los sensores detectan una interrupción.
+Verifican que no haya múltiples disparos por ruido con el sistema debounce y actualizan el contador si el sistema está activo. Asimismo, button_callback() se ejecuta cuando se pulsa el botón físico.
+Si no hay una emergencia activa, se lanza un proceso que enciende el LED rojo durante un segundo a modo de emergencia. Como se ha comento antes, este proceso tiene prioridad alta para que la
+emergencia se active con máxima prioridad. Por otro lado, tarea_oled() es el proceso que se encarga de leer el Queue y actualiza la pantalla OLED con el valor del contador. Esta función 
+está en un bucle que se repite constantemente. Por último, la función set_priority() ajusta la prioridad de ejecución de los procesos, usando las capacidades real-time del sistema. Si no se
+tienen pemisos de superusuario, se muestra un aviso.
 
 ## Kernel
 Para poder realzar aplicaciones en tiempo real se instala un Kernel en tiempo real que nos permitirá utilizar un scheduler diferente, a continuación se explica el procedimiento llevado a cabo para descargar el código fuente del Kernel, configurarlo y compilarlo.  
 
-## Descarga del Kernel y el parche
+### Descarga del Kernel y el parche
 Accedemos a la documentación oficial de Raspberry Pi mediante el siguiente link:
 https://www.raspberrypi.com/documentation/computers/linux_kernel.html
 
@@ -24,7 +48,7 @@ Lo movemos al interior de la carpeta linux y parcheamos mediante el siguiente co
 ### Aplicamos el parche
 >patch -p1 < patch-6.6.77-rt50.patch
 
-## Configuración y compilación del Kernel
+### Configuración y compilación del Kernel
 Configuramos el Kernel para nuestra Raspberry Pi 4B de 64 bits
 >cd linux  
 >KERNEL=kernel8  
@@ -60,31 +84,3 @@ e instalamos los "Device Tree Blobs",
 >sudo cp arch/arm64/boot/dts/overlays/README mnt/boot/overlays/  
 >sudo umount mnt/boot  
 >sudo umount mnt/root
-
-## Descripción del hardware
-Metemos aquí las fotos y las explicamos?
-
-## Descripción del sistema
-El proyecto está compuesto por varios archivos Python, cada uno con funciones específicas. Estos, se relacionan entre sí mediante el uso compartido de recursos como colas (Queue)
-y variables de estado (Value). La interacción con el hadware se realiza a través de la biblioteca gpiozero y la visualización OLED mediante la librería luma.oled.
-
-El archivo main.py es el script principal, donde se inicializan los sensores, el LED rojo, el botón y la pantalla OLED. En este archivo, se crea el objeto que maneja el contador, que lleva
-la cuenta de los eventos. Adenás, también se configuran las interrupciones, así cuando un sensor detecta un cambio se llama a la función que actualiza el contador. 
-Por otro lado, también se lanza un proceso aparta para encargarse de actualizar la pantalla, de modo que esta esté leyendo continuamente el valor del contador sin molestar al resto del sistema.
-Finalmente, es importante comentar la gestión de prioridades de los procesos de este archivo. El proceso que enciende el LED rojo por una emergencia es el que mayor prioridad tiene (90), ya que
-en caso de emergencia es esencial que todo quede en segundo plano menos la señal de emergencia que es el LED rojo. Sin embargo, la pantalla baja tiene una prioridad más baja (20), porque no es
-tan crítico como puede ser la señal de emergencia.
-
-En el archivo ContadorLocal.py se gestiona el valor del contador con dos métodos: incrementar() y decrementar(). Estos están protegidos por un bloqueo para evitar que dos procesos accedan al
-contador al mismo tiempo y así evitar errores que se podrían generar. Cada vez que se actualiza el valor del contador, se manda a la Queue que está leyendo continuamente le proceso de la pantalla
-OLED, así todos los cambios se reflejan al momento.
-
-El archivo shared_resources.py solamente define el Queue que se utiliza como recurso compartido entre procesos. Se define la Queue aquí para que todos los módulos que la necesiten la importen
-desde un único lugar.
-
-Finalmente, tasks.py contiene las funciones que hacen tareas concretas. Las funciones increment_callback() y decrement_callback() se ejecutan cuando los sensores detectan una interrupción.
-Verifican que no haya múltiples disparos por ruido con el sistema debounce y actualizan el contador si el sistema está activo. Asimismo, button_callback() se ejecuta cuando se pulsa el botón físico.
-Si no hay una emergencia activa, se lanza un proceso que enciende el LED rojo durante un segundo a modo de emergencia. Como se ha comento antes, este proceso tiene prioridad alta para que la
-emergencia se active con máxima prioridad. Por otro lado, tarea_oled() es el proceso que se encarga de leer el Queue y actualiza la pantalla OLED con el valor del contador. Esta función 
-está en un bucle que se repite constantemente. Por último, la función set_priority() ajusta la prioridad de ejecución de los procesos, usando las capacidades real-time del sistema. Si no se
-tienen pemisos de superusuario, se muestra un aviso.
