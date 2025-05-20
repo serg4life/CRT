@@ -2,6 +2,8 @@
 ## Introducción
 Este repositorio describe el proyecto realizado para la asignatura "Control mediante Real-Time Linux". En este proyecto se utiliza una Raspberry Pi 4B de 8GB de RAM para implementar una aplicacion en tiempo real. La aplicación a implementar se trata de un programa que incrementa y decrementa en tiempo real un contador en función de los pulsos detectados en dos pares de fototransistores, el valor del contador se muestra en una pantalla OLED de 0,96" controlada mediante i2c. Adicionalmente, hay un botón que simula una parada de emergencia y cuya única función es encender un LED rojo.
 
+<img src="/doc/system.png" width="1000">
+
 ## Descripción del sistema
 El proyecto está compuesto por varios archivos Python, cada uno con funciones específicas. Estos, se relacionan entre sí mediante el uso compartido de recursos como colas (Queue)
 y variables de estado (Value). La interacción con el hadware se realiza a través de la biblioteca gpiozero y la visualización OLED mediante la librería luma.oled.
